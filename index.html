@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulação de Altura Focal - Corte Laser em MDF</title>
+  <style>
+    :root {
+      --bg-color: #1a1a1a;
+      --card-bg: #2a2a2a;
+      --text-color: #ffffff;
+      --accent-color: #00d2d3;
+      --laser-red: #ff0055;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-size: 1.8rem;
+      text-align: center;
+    }
+
+    p.description {
+      color: #aaa;
+      max-width: 800px;
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+    }
+
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      max-width: 1000px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .canvas-container {
+      background-color: #111;
+      border-radius: 8px;
+      border: 1px solid #444;
+      overflow: hidden;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+    }
+
+    canvas {
+      display: block;
+    }
+
+    .controls {
+      background-color: var(--card-bg);
+      padding: 20px;
+      border-radius: 8px;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: bold;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    label span {
+      color: var(--accent-color);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--laser-red);
+      cursor: pointer;
+    }
+
+    .status-card {
+      background-color: #1e1e1e;
+      border-left: 4px solid var(--laser-red);
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
+    .status-card h3 {
+      font-size: 0.95rem;
+      margin-bottom: 5px;
+      color: #fff;
+    }
+
+    .btn-laser {
+      background-color: var(--laser-red);
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn-laser:hover {
+      background-color: #ff6b81;
+    }
+
+    .btn-laser:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Simulador de Ajuste Focal e Espessura (MDF)</h1>
+  <p class="description">
+    Ajuste a distância focal da lente e a espessura do MDF em milímetros. Observe como a waist (cintura) do feixe influencia a penetração e o perfil do corte.
+  </p>
+
+  <div class="container">
+    <div class="canvas-container">
+      <canvas id="simCanvas" width="600" height="480"></canvas>
+    </div>
+
+    <div class="controls">
+      <div class="control-group">
+        <label for="heightSlider">Posição do Bocal (Altura): <span id="heightValue">50 mm</span></label>
+        <input type="range" id="heightSlider" min="20" max="90" value="50" step="0.5">
+      </div>
+
+      <div class="control-group">
+        <label for="focalSlider">Distância Focal da Lente: <span id="focalValue">50.8 mm (2.0")</span></label>
+        <input type="range" id="focalSlider" min="25.4" max="101.6" value="50.8" step="0.1">
+      </div>
+
+      <div class="control-group">
+        <label for="mdfSlider">Espessura do MDF: <span id="mdfValue">3.0 mm</span></label>
+        <input type="range" id="mdfSlider" min="1" max="15" value="3" step="0.5">
+      </div>
+
+      <div class="control-group">
+        <label for="powerSlider">Potência do Laser: <span id="powerValue">80%</span></label>
+        <input type="range" id="powerSlider" min="20" max="100" value="80" step="5">
+      </div>
+
+      <button class="btn-laser" id="pulseBtn">Simular Disparo / Corte</button>
+
+      <div class="status-card">
+        <h3 id="statusTitle">Diagnóstico do Corte</h3>
+        <p id="statusDesc">Analise os parâmetros para ver a eficiência do corte.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('simCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Elementos de UI
+    const heightSlider = document.getElementById('heightSlider');
+    const heightValue = document.getElementById('heightValue');
+    const focalSlider = document.getElementById('focalSlider');
+    const focalValue = document.getElementById('focalValue');
+    const mdfSlider = document.getElementById('mdfSlider');
+    const mdfValue = document.getElementById('mdfValue');
+    const powerSlider = document.getElementById('powerSlider');
+    const powerValue = document.getElementById('powerValue');
+    const pulseBtn = document.getElementById('pulseBtn');
+
+    const statusTitle = document.getElementById('statusTitle');
+    const statusDesc = document.getElementById('statusDesc');
+
+    // Escala da simulação: 1 mm real = 4 pixels no Canvas
+    const SCALE = 4;
+
+    // Posições base em milímetros reais
+    const mdfTopY_mm = 70; // Posição fixa da superfície superior do MDF em mm
+    
+    // Variáveis de Estado (em mm)
+    let nozzleHeight_mm = parseFloat(heightSlider.value); // Distância do bocal até a superfície do MDF
+    let focalLength_mm = parseFloat(focalSlider.value);   // Distância da lente ao ponto focal
+    let mdfThickness_mm = parseFloat(mdfSlider.value);   // Padrão 3mm
+    let power = parseInt(powerSlider.value);
+
+    let isFiring = false;
+    let cutProgress = 0;
+
+    // Event Listeners
+    heightSlider.addEventListener('input', (e) => {
+      nozzleHeight_mm = parseFloat(e.target.value);
+      heightValue.textContent = `${nozzleHeight_mm.toFixed(1)} mm`;
+      updateStatus();
+    });
+
+    focalSlider.addEventListener('input', (e) => {
+      focalLength_mm = parseFloat(e.target.value);
+      const inches = (focalLength_mm / 25.4).toFixed(1);
+      focalValue.textContent = `${focalLength_mm.toFixed(1)} mm (${inches}")`;
+      updateStatus();
+    });
+
+    mdfSlider.addEventListener('input', (e) => {
+      mdfThickness_mm = parseFloat(e.target.value);
+      mdfValue.textContent = `${mdfThickness_mm.toFixed(1)} mm`;
+      updateStatus();
+    });
+
+    powerSlider.addEventListener('input', (e) => {
+      power = parseInt(e.target.value);
+      powerValue.textContent = `${power}%`;
+    });
+
+    pulseBtn.addEventListener('click', () => {
+      isFiring = true;
+      cutProgress = 0;
+    });
+
+    function updateStatus() {
+      // Posição Y do ponto focal em mm
+      const nozzleY_mm = mdfTopY_mm - nozzleHeight_mm;
+      const focusY_mm = nozzleY_mm + focalLength_mm;
+      
+      // Posição do ponto focal em relação à chapa de MDF (0 = topo, mdfThickness_mm = base)
+      const focusRelative_mm = focusY_mm - mdfTopY_mm;
+
+      if (focusRelative_mm < -2) {
+        statusTitle.textContent = "Foco Muito Alto (Fora da Peça)";
+        statusTitle.style.color = "#ff4757";
+        statusDesc.textContent = `O foco está ${Math.abs(focusRelative_mm).toFixed(1)} mm acima da superfície. O feixe chega largo, queimando as bordas e perdendo poder de corte.`;
+      } else if (focusRelative_mm >= -2 && focusRelative_mm <= mdfThickness_mm + 1) {
+        statusTitle.textContent = "Foco Otimizado";
+        statusTitle.style.color = "#2ed573";
+        statusDesc.textContent = `Ponto focal dentro do MDF de ${mdfThickness_mm} mm. Concentração ideal de energia para um corte preciso e com mínima carbonização.`;
+      } else {
+        statusTitle.textContent = "Foco Muito Baixo (Abaixo da Peça)";
+        statusTitle.style.color = "#ffa502";
+        statusDesc.textContent = `O foco está ${(focusRelative_mm - mdfThickness_mm).toFixed(1)} mm abaixo do fundo do MDF. O topo da peça receberá um feixe desfocado e largo.`;
+      }
+    }
+
+    function drawScene() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const centerX = canvas.width / 2;
+      
+      // Conversão das medidas mm -> pixels
+      const mdfTopY = mdfTopY_mm * SCALE;
+      const mdfThickness = mdfThickness_mm * SCALE;
+      const mdfBottomY = mdfTopY + mdfThickness;
+
+      const nozzleY = (mdfTopY_mm - nozzleHeight_mm) * SCALE;
+      const focalLength = focalLength_mm * SCALE;
+      const focusY = nozzleY + focalLength;
+
+      // 1. Desenhar a Placa de MDF
+      ctx.fillStyle = '#c8965d';
+      ctx.fillRect(40, mdfTopY, canvas.width - 80, mdfThickness);
+
+      ctx.strokeStyle = '#8a5a2b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(40, mdfTopY, canvas.width - 80, mdfThickness);
+
+      // Rótulo da espessura no MDF
+      ctx.fillStyle = '#4a2e11';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(`MDF ${mdfThickness_mm} mm`, 50, mdfTopY + Math.min(mdfThickness - 4, 18));
+
+      // 2. Geometria do Laser (Feixe Gaussiano em mm)
+      const initialBeamRadius = 5 * SCALE; // Raio no bocal
+      const minBeamRadius = 0.15 * SCALE;  // Ponto de menor diâmetro (Cintura)
+      const bottomY = canvas.height - 20;
+
+      // Desenho do feixe cone superior e inferior
+      ctx.beginPath();
+      // Entrada no bocal
+      ctx.moveTo(centerX - initialBeamRadius, nozzleY);
+      ctx.lineTo(centerX + initialBeamRadius, nozzleY);
+      
+      // Estrangulamento no Ponto Focal
+      ctx.lineTo(centerX + minBeamRadius, focusY);
+      
+      // Divergência após o foco
+      const distBelowFocus = (bottomY - focusY) / SCALE;
+      const bottomRadius = minBeamRadius + (Math.abs(distBelowFocus) * 0.12 * SCALE);
+      
+      ctx.lineTo(centerX + bottomRadius, bottomY);
+      ctx.lineTo(centerX - bottomRadius, bottomY);
+      ctx.lineTo(centerX - minBeamRadius, focusY);
+      ctx.closePath();
+
+      // Gradiente do Laser
+      const laserGradient = ctx.createLinearGradient(0, nozzleY, 0, bottomY);
+      laserGradient.addColorStop(0, 'rgba(255, 0, 85, 0.45)');
+      laserGradient.addColorStop(0.5, 'rgba(255, 60, 60, 0.75)');
+      laserGradient.addColorStop(1, 'rgba(255, 0, 85, 0.2)');
+
+      ctx.fillStyle = laserGradient;
+      ctx.fill();
+
+      // Linha de centro do feixe
+      ctx.beginPath();
+      ctx.moveTo(centerX, nozzleY);
+      ctx.lineTo(centerX, bottomY);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#ff0055';
+      ctx.shadowBlur = 8;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Linha e Marcador do Ponto Focal
+      ctx.strokeStyle = '#00d2d3';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(centerX - 45, focusY);
+      ctx.lineTo(centerX + 45, focusY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#00d2d3';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(`Ponto Focal (${focalLength_mm} mm)`, centerX + 50, focusY + 4);
+
+      // 3. Animação de Corte e Ação no MDF
+      if (isFiring) {
+        cutProgress += 0.04;
+        if (cutProgress > 1) cutProgress = 1;
+
+        // Cálculo do diâmetro do feixe na entrada da peça
+        const distToMdfTop_mm = Math.abs((mdfTopY - focusY) / SCALE);
+        const topRadius_mm = 0.15 + (distToMdfTop_mm * 0.08);
+
+        // Eficiência baseada no foco vs centro da peça
+        const mdfCenterY_mm = mdfTopY_mm + (mdfThickness_mm / 2);
+        const focusY_mm_real = focusY / SCALE;
+        const distFromCenter = Math.abs(mdfCenterY_mm - focusY_mm_real);
+
+        // Densidade de energia
+        let efficiency = Math.max(0.15, 1 - (distFromCenter / (mdfThickness_mm * 2)));
+        efficiency *= (power / 100);
+
+        // Profundidade do corte atingida
+        const maxPenetration_mm = mdfThickness_mm * efficiency * 1.6;
+        const currentDepth_mm = Math.min(mdfThickness_mm, maxPenetration_mm * cutProgress);
+        const currentDepth_px = currentDepth_mm * SCALE;
+
+        // Desenhar a cavidade/rasgo do corte
+        const kerfTop_px = topRadius_mm * 2 * SCALE;
+        
+        // Raio no fundo do corte
+        const distToCutBottom_mm = Math.abs(((mdfTopY + currentDepth_px) - focusY) / SCALE);
+        const bottomRadius_mm = 0.15 + (distToCutBottom_mm * 0.08);
+        const kerfBottom_px = bottomRadius_mm * 2 * SCALE;
+
+        ctx.fillStyle = '#180c04'; // Madeira queimada
+        ctx.beginPath();
+        ctx.moveTo(centerX - kerfTop_px / 2, mdfTopY);
+        ctx.lineTo(centerX + kerfTop_px / 2, mdfTopY);
+        ctx.lineTo(centerX + kerfBottom_px / 2, mdfTopY + currentDepth_px);
+        ctx.lineTo(centerX - kerfBottom_px / 2, mdfTopY + currentDepth_px);
+        ctx.closePath();
+        ctx.fill();
+
+        // Faíscas/Incandescência no ponto de corte
+        if (cutProgress < 1 || currentDepth_mm < mdfThickness_mm) {
+          ctx.fillStyle = '#ffda79';
+          ctx.beginPath();
+          ctx.arc(centerX + (Math.random() * 4 - 2), mdfTopY + currentDepth_px, Math.random() * 4 + 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+
+      // 4. Desenho do Cabeçote / Bocal (Nozzle)
+      ctx.fillStyle = '#444';
+      ctx.fillRect(centerX - 30, nozzleY - 40, 60, 30);
+
+      ctx.beginPath();
+      ctx.moveTo(centerX - 20, nozzleY - 10);
+      ctx.lineTo(centerX + 20, nozzleY - 10);
+      ctx.lineTo(centerX + 6, nozzleY);
+      ctx.lineTo(centerX - 6, nozzleY);
+      ctx.closePath();
+      ctx.fillStyle = '#666';
+      ctx.fill();
+
+      // Cota de Distância Bocal-MDF
+      ctx.strokeStyle = '#888';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(centerX - 80, nozzleY);
+      ctx.lineTo(centerX - 80, mdfTopY);
+      ctx.stroke();
+
+      ctx.fillStyle = '#aaa';
+      ctx.font = '11px sans-serif';
+      ctx.fillText(`${nozzleHeight_mm.toFixed(1)} mm`, centerX - 125, nozzleY + (mdfTopY - nozzleY) / 2);
+
+      requestAnimationFrame(drawScene);
+    }
+
+    // Inicialização
+    updateStatus();
+    drawScene();
+  </script>
+</body>
+</html>
